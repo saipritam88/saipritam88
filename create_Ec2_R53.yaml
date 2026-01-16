@@ -1,24 +1,63 @@
 ---
-name : Create EC2 Instance with Route 53 Record
-host: local
-connection: local
-vars:
-  ami_id: "ami-09c813fb71547fc4f"
-  sg_id: "sg-04942374fe172ba17"
-  Zone_ID: "Z0948150OFPSYTNVYZOY"
-  domain_name: "saikdevops.fun"
-  instances:
-    - mongodb
-    - redis
-tasks:
+- name: Create EC2 Instance and Route 53 Record
+  hosts: local
+  connection: local
+  vars:
+    ami: "ami-09c813fb71547fc4f"
+    sg_id: "sg-04942374fe172ba17"
+    zone_id: "Z0948150OFPSYTNVYZOY"
+    domain_name: "saikdevops.fun"
+    instances:
+      # - mongodb
+      # - mysql
+      # - rabbitmq
+      # - redis
+      # - catalogue
+      # - user
+      # - cart
+      # - shipping
+      # - payment
+      # - frontend
+      # - dispatch
+
+    
+  tasks:
   - name: Launch EC2 Instances
     amazon.aws.ec2_instance:
-      name: "{{ item }}"
-      instance_type: "t2.micro"
-      image_id: "{{ ami_id }}"
-      group_id: "{{ sg_id }}"
-      count: 1
-      instance_tags:
-        Name: "{{ item }}"
+       name: "{{ item }}"
+       instance_type: "t2.micro"
+       image_id: "{{ ami }}"
+       security_group: "{{ sg_id }}"
+       count: 1
+       tags:
+         Name: "{{ item }}"
     loop: "{{ instances }}"
-    register: ec2-output
+    register: ec2_output
+
+  # - name: Debug EC2 Output
+  #   ansible.builtin.debug:
+  #      msg: "{{ ec2_output }}"
+
+  - name: Create Route 53 Record
+    amazon.aws.route53:
+      zone: "{{ domain_name }}"
+      state: present
+      record: "{{ item.item }}.{{ domain_name }}" # e.g., mongodb.saikdevops.fun
+      type: A
+      ttl: 1
+      value: "{{ item.instances[0].private_ip_address }}"
+      overwrite: true
+    loop: "{{ ec2_output.results }}"
+
+  - name: create route53 record for frontend
+    amazon.aws.route53:
+      state: present
+      zone: "{{ domain_name }}"
+      record: "{{ domain_name }}" # daws86s.fun
+      type: A
+      ttl: 1
+      value: "{{ item.instances[0].public_ip_address }}"
+      overwrite: true
+    when: item.item == "frontend"
+    loop: "{{ ec2_output.results }}"
+    tags: frontend_route53

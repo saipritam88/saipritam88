@@ -1,0 +1,19 @@
+---
+- name: setup dispatch server
+  hosts: dispatch
+  become: yes
+
+- tasks: 
+  - name: install golang
+    ansible.builtin.dnf:
+      name: golang
+      state: present
+
+  - name: add application user
+    ansible.builtin.user:
+      name: roboshop
+      state: present
+      shell: /sbin/nologin
+      home: /app
+
+    

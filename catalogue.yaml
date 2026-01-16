@@ -1,0 +1,88 @@
+---
+- name: setup catalogue service
+  hosts: catalogue
+  become: yes
+
+  tasks: 
+  - name: disable nodejs version
+    ansible.builtin.command: dnf module disable nodejs -y
+
+  - name: enable nodejs version
+    ansible.builtin.command: dnf module enable nodejs:20 -y
+
+  - name: install nodejs
+    ansible.builtin.package:
+        name: nodejs
+        state: present
+        
+  - name: add application user
+    ansible.builtin.user:
+      name: roboshop
+      state: present
+      shell: /sbin/nologin
+      home: /app
+
+  - name: create application directory
+    ansible.builtin.file:
+      path: /app
+      state: directory
+    
+  - name: download catalogue service code
+    ansible.builtin.get_url:
+      url: https://roboshop-artifacts.s3.amazonaws.com/catalogue-v3.zip
+      dest: /tmp/catalogue.zip
+    
+  - name: unzip catalogue service code
+    ansible.builtin.unarchive:
+      src: /tmp/catalogue.zip
+      dest: /app
+      remote_src: yes
+
+  - name: install npm dependencies
+    community.general.npm:
+      path: /app
+    
+  - name: Copy systemd service file
+    ansible.builtin.copy:
+      src: catalogue.service
+      dest: /etc/systemd/system/catalogue.service
+    
+  - name: reload daemon
+    ansible.builtin.systemd:
+      daemon_reload: yes
+  - name: start catalogue service
+    ansible.builtin.service:
+      name: catalogue
+      state: started
+      enabled: yes
+    
+  - name: copy mongodb repo
+    ansible.builtin.copy:
+      src: mongo.repo
+      dest: /etc/yum.repos.d/mongo.repo
+
+  - name: install mongodb-mongosh
+    ansible.builtin.package:
+      name: mongodb-mongosh
+      state: present
+
+  - name: connect to mongodb catalogue
+    ansible.builtin.command: mongosh mongodb.saikdevops.fun --quiet --eval "db.getMongo().getDBNames().indexOf('catalogue')"
+    register: catalogue_output
+
+  - name: catalogue_output debug
+    ansible.builtin.debug:
+      msg: "{{ catalogue_output }}"
+    
+  - name: load catalogue schema
+    ansible.builtin.shell: mongosh --host mongodb.saikdevops.fun </app/db/master-data.js
+    when: catalogue_output.stdout | int < 0
+
+  - name: start catalogue service
+    ansible.builtin.service:
+      name: catalogue
+      state: started
+      enabled: yes
+      daemon_reload: yes
+
+    
